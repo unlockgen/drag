@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#050505" />
+<title>Churchracersja Drag Tree</title>
+<style>
+:root{--bg:#050505;--panel:#111;--text:#f7f7f7;--muted:#9c9c9c;--amber:#ffb000;--green:#19e66f;--red:#ff3a3a;--line:#262626}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#151515 0,#050505 48%,#000 100%);color:var(--text);font-family:Arial,Helvetica,sans-serif;min-height:100vh}main{max-width:760px;margin:auto;padding:24px 16px 40px}.brand{text-align:center;margin-bottom:18px}.brand h1{margin:0;font-size:clamp(28px,7vw,52px);letter-spacing:.04em;text-transform:uppercase}.brand p{margin:6px 0 0;color:var(--muted);letter-spacing:.18em;font-weight:700}.panel{background:linear-gradient(180deg,#121212,#0a0a0a);border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:0 18px 50px rgba(0,0,0,.45)}.tree{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:330px;margin:18px auto}.lamp{height:54px;border-radius:18px;background:#171717;border:1px solid #2c2c2c;box-shadow:inset 0 0 18px #000}.lamp.on.amber{background:var(--amber);box-shadow:0 0 28px rgba(255,176,0,.65)}.lamp.on.green{background:var(--green);box-shadow:0 0 28px rgba(25,230,111,.7)}.lamp.on.red{background:var(--red);box-shadow:0 0 28px rgba(255,58,58,.7)}.status{text-align:center}.rt{font-size:clamp(42px,11vw,72px);font-weight:900;letter-spacing:.04em}.unit{color:var(--muted);font-size:13px;letter-spacing:.16em}.message{margin:8px 0 18px;font-weight:800;letter-spacing:.08em}.launch{width:100%;padding:22px 16px;border-radius:18px;border:0;font-size:22px;font-weight:900;background:linear-gradient(180deg,#f2f2f2,#cfcfcf);color:#0b0b0b;box-shadow:0 8px 0 #7c7c7c;touch-action:none}.launch:active{transform:translateY(4px);box-shadow:0 4px 0 #7c7c7c}.hint{text-align:center;color:var(--muted);font-size:13px;margin-top:11px}.settings,.stats{display:grid;gap:12px;margin-top:18px}.row{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}select,button.small{background:#181818;color:#fff;border:1px solid #333;border-radius:12px;padding:10px 12px}.statsGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{background:#0d0d0d;border:1px solid #242424;border-radius:16px;padding:14px;text-align:center}.stat b{display:block;font-size:22px}.stat span{font-size:11px;color:var(--muted)}ol{padding-left:22px;color:#ddd}.foot{text-align:center;color:#777;font-size:12px;margin-top:18px}@media(max-width:520px){main{padding-top:16px}.panel{border-radius:18px}.tree{max-width:280px}.statsGrid{grid-template-columns:1fr 1fr 1fr}.stat{padding:10px 6px}.stat b{font-size:18px}}
+</style>
+</head>
+<body>
+<main>
+<section class="brand"><h1>Churchracersja</h1><p>DRAG TREE · REACTION TRAINER</p></section>
+<section class="panel">
+<div class="status"><div class="rt" id="rt">—.———</div><div class="unit">SECONDS</div><div class="message" id="msg">READY TO STAGE</div></div>
+<div class="tree" aria-label="drag racing tree">
+<div class="lamp" id="pre1"></div><div class="lamp" id="pre2"></div>
+<div class="lamp" id="a1"></div><div class="lamp" id="a2"></div>
+<div class="lamp" id="a3"></div><div class="lamp" id="a4"></div>
+<div class="lamp" id="a5"></div><div class="lamp" id="a6"></div>
+<div class="lamp" id="g1"></div><div class="lamp" id="g2"></div>
+</div>
+<button class="launch" id="launch">HOLD TO LAUNCH</button>
+<div class="hint">Hold to stage. Release on green.</div>
+<div class="settings">
+<div class="row"><span>Engine & tree sounds</span><button class="small" id="soundBtn">Sound on</button></div>
+<div class="row"><span>Tree format</span><select id="treeMode"><option value="sportsman">Sportsman · .500</option><option value="pro">Pro · .400</option></select></div>
+</div>
+<div class="stats">
+<div class="statsGrid"><div class="stat"><b id="best">—</b><span>BEST RT</span></div><div class="stat"><b id="runs">0</b><span>RUNS</span></div><div class="stat"><b id="reds">0</b><span>RED LIGHTS</span></div></div>
+<div class="row"><strong>RECENT RUNS</strong><button class="small" id="reset">Reset stats</button></div>
+<ol id="recent"><li>No runs yet.</li></ol>
+</div>
+</section>
+<div class="foot">On iPhone: Safari → Share → Add to Home Screen.<br>Churchracersja</div>
+</main>
+<script>
+const $=id=>document.getElementById(id), lamps=['pre1','pre2','a1','a2','a3','a4','a5','a6','g1','g2'];
+let staged=false,greenAt=0,timers=[],audioOn=true,waiting=false;
+const stats=JSON.parse(localStorage.getItem('crj-drag-stats')||'{"best":null,"runs":0,"reds":0,"recent":[]}');
+function save(){localStorage.setItem('crj-drag-stats',JSON.stringify(stats));renderStats()}
+function renderStats(){$('best').textContent=stats.best==null?'—':stats.best.toFixed(3);$('runs').textContent=stats.runs;$('reds').textContent=stats.reds;const r=$('recent');r.innerHTML=stats.recent.length?stats.recent.map(x=>'<li>'+x+'</li>').join(''):'<li>No runs yet.</li>'}
+function clearTree(){timers.forEach(clearTimeout);timers=[];lamps.forEach(id=>$(id).className='lamp')}
+function beep(freq=700,dur=.07){if(!audioOn)return;try{const ac=new (window.AudioContext||window.webkitAudioContext)(),o=ac.createOscillator(),g=ac.createGain();o.frequency.value=freq;o.connect(g);g.connect(ac.destination);g.gain.setValueAtTime(.12,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+dur);o.start();o.stop(ac.currentTime+dur)}catch(e){}}
+function light(ids,cls){ids.forEach(id=>$(id).className='lamp on '+cls);beep(cls==='green'?1000:cls==='red'?220:650,.08)}
+function goGreen(){greenAt=performance.now();light(['g1','g2'],'green');$('msg').textContent='GO!'}
+function startSequence(){clearTree();$('rt').textContent='—.———';$('msg').textContent='STAGED';light(['pre1','pre2'],'amber');const mode=$('treeMode').value;if(mode==='sportsman'){[500,1000,1500].forEach((t,i)=>timers.push(setTimeout(()=>light(['a'+(i*2+1),'a'+(i*2+2)],'amber'),t)));timers.push(setTimeout(goGreen,2000))}else{timers.push(setTimeout(()=>light(['a1','a2','a3','a4','a5','a6'],'amber'),500));timers.push(setTimeout(goGreen,900))}waiting=true}
+function recordReaction(rt){stats.runs++;let label;if(rt<0){stats.reds++;label='RED '+Math.abs(rt).toFixed(3)+'s';$('rt').textContent='RED';$('msg').textContent='RED LIGHT';light(['g1','g2'],'red')}else{label=rt.toFixed(3)+'s';$('rt').textContent=rt.toFixed(3);$('msg').textContent=rt<.05?'LIGHTNING!':rt<.12?'GREAT REACTION':rt<.2?'GOOD RUN':'KEEP PRACTICING';if(stats.best==null||rt<stats.best)stats.best=rt}stats.recent.unshift(label);stats.recent=stats.recent.slice(0,8);save();waiting=false;staged=false}
+function release(){if(!staged)return;const now=performance.now();if(!greenAt){recordReaction(-0.001);return}recordReaction((now-greenAt)/1000)}
+$('launch').addEventListener('pointerdown',e=>{e.preventDefault();if(staged||waiting)return;staged=true;greenAt=0;startSequence()});
+$('launch').addEventListener('pointerup',e=>{e.preventDefault();release()});
+$('launch').addEventListener('pointercancel',release);
+$('soundBtn').onclick=()=>{audioOn=!audioOn;$('soundBtn').textContent=audioOn?'Sound on':'Sound off'};
+$('reset').onclick=()=>{stats.best=null;stats.runs=0;stats.reds=0;stats.recent=[];localStorage.removeItem('crj-drag-stats');renderStats();clearTree();$('rt').textContent='—.———';$('msg').textContent='READY TO STAGE'};
+renderStats();
+</script>
+</body>
+</html>
