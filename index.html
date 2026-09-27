@@ -295,7 +295,7 @@ function paintRPM(value){
   rpm = Math.max(1000, Math.min(11000, value));
 
   const rpmStep = (rpm - 1000) / 1000;
-  const startAngle = -135;
+  const startAngle = -225;
   const degreesPerStep = 27;
   const angle = startAngle + (rpmStep * degreesPerStep);
   const pct = ((rpm - 1000) / 10000) * 100;
