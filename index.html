@@ -270,18 +270,31 @@ function startEngine(){
     audioCtx.resume().then(()=>{if(held)startEngine()}).catch(()=>{});
     return;
   }
-  try{const t=audioCtx.currentTime,a=audioCtx.createOscillator(),b=audioCtx.createOscillator(),filter=audioCtx.createBiquadFilter(),g=audioCtx.createGain(),pulse=audioCtx.createOscillator(),depth=audioCtx.createGain();a.type='sawtooth';b.type='triangle';a.frequency.setValueAtTime(65,t);a.frequency.exponentialRampToValueAtTime(118,t+.5);b.frequency.setValueAtTime(130,t);b.frequency.exponentialRampToValueAtTime(238,t+.5);filter.type='lowpass';filter.frequency.value=680;g.gain.value=.045;pulse.frequency.value=24;depth.gain.value=8;pulse.connect(depth);depth.connect(a.frequency);a.connect(filter);b.connect(filter);filter.connect(g).connect(masterGain);engineNodes=[a,b,pulse,depth,filter,g];a.start();b.start();pulse.start()}catch{stopEngine()}
+  try{
+    const p=garageCars[selectedCar].sound,t=audioCtx.currentTime;
+    const a=audioCtx.createOscillator(),b=audioCtx.createOscillator(),filter=audioCtx.createBiquadFilter(),g=audioCtx.createGain(),pulse=audioCtx.createOscillator(),depth=audioCtx.createGain();
+    a.type=selectedCar==='awd'?'square':'sawtooth';
+    b.type=selectedCar==='dc5'?'sine':'triangle';
+    a.frequency.setValueAtTime(p.idle1,t);a.frequency.exponentialRampToValueAtTime(p.idle1*1.7,t+.45);
+    b.frequency.setValueAtTime(p.idle2,t);b.frequency.exponentialRampToValueAtTime(p.idle2*1.7,t+.45);
+    filter.type='lowpass';filter.frequency.value=p.filter;
+    g.gain.value=selectedCar==='awd'?.052:.044;
+    pulse.frequency.value=p.pulse;depth.gain.value=selectedCar==='dc5'?10:7;
+    pulse.connect(depth);depth.connect(a.frequency);
+    a.connect(filter);b.connect(filter);filter.connect(g).connect(masterGain);
+    engineNodes=[a,b,pulse,depth,filter,g];a.start();b.start();pulse.start();
+  }catch{stopEngine()}
 }
 function launchControlPop(){
   if(!soundEnabled||!audioCtx||!masterGain)return;
   try{
-    const t=audioCtx.currentTime;
+    const p=garageCars[selectedCar].sound,t=audioCtx.currentTime;
     const buffer=audioCtx.createBuffer(1,Math.floor(audioCtx.sampleRate*.055),audioCtx.sampleRate);
     const data=buffer.getChannelData(0);
     for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*(1-i/data.length);
     const src=audioCtx.createBufferSource(),filter=audioCtx.createBiquadFilter(),g=audioCtx.createGain();
-    src.buffer=buffer;filter.type='bandpass';filter.frequency.value=120+Math.random()*130;filter.Q.value=.8;
-    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.13,t+.004);g.gain.exponentialRampToValueAtTime(.001,t+.05);
+    src.buffer=buffer;filter.type='bandpass';filter.frequency.value=p.pop+Math.random()*90;filter.Q.value=selectedCar==='awd'?.55:.8;
+    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(selectedCar==='awd'?.16:.12,t+.004);g.gain.exponentialRampToValueAtTime(.001,t+.05);
     src.connect(filter).connect(g).connect(masterGain);src.start(t);src.stop(t+.06);
   }catch{}
 }
@@ -293,18 +306,20 @@ function startLaunchControl(){
     return;
   }
   try{
-    const t=audioCtx.currentTime;
+    const p=garageCars[selectedCar].sound,t=audioCtx.currentTime;
     const a=audioCtx.createOscillator(),b=audioCtx.createOscillator(),sub=audioCtx.createOscillator();
     const mix=audioCtx.createGain(),cut=audioCtx.createGain(),filter=audioCtx.createBiquadFilter();
-    a.type='sawtooth';b.type='square';sub.type='triangle';
-    a.frequency.value=196;b.frequency.value=392;sub.frequency.value=98;
-    filter.type='lowpass';filter.frequency.value=1450;filter.Q.value=1.2;
-    mix.gain.value=.035;
+    a.type=selectedCar==='dc5'?'sawtooth':selectedCar==='awd'?'square':'triangle';
+    b.type=selectedCar==='eg'?'square':'sawtooth';
+    sub.type='triangle';
+    a.frequency.value=p.lc1;b.frequency.value=p.lc2;sub.frequency.value=p.lcSub;
+    filter.type='lowpass';filter.frequency.value=p.lcFilter;filter.Q.value=selectedCar==='dc5'?1.5:1.1;
+    mix.gain.value=selectedCar==='awd'?.045:.034;
     cut.gain.setValueAtTime(.9,t);
-    const step=.045;
+    const step=selectedCar==='dc5'?.038:selectedCar==='awd'?.052:.045;
     for(let i=0;i<120;i++){
       const tt=t+i*step;
-      cut.gain.setValueAtTime(i%2===0?.92:.16,tt);
+      cut.gain.setValueAtTime(i%2===0?.92:selectedCar==='awd'?.1:.16,tt);
     }
     a.connect(filter);b.connect(filter);sub.connect(filter);filter.connect(mix).connect(cut).connect(masterGain);
     a.start();b.start();sub.start();
@@ -313,11 +328,28 @@ function startLaunchControl(){
     launchControlTimer=setInterval(()=>{
       if(!held||!(phase==='arming'||phase==='countdown'||phase==='green')){stopLaunchControl();return}
       tick++;
-      if(tick%3===0||Math.random()<.42)launchControlPop();
-    },115);
+      const cadence=selectedCar==='dc5'?2:selectedCar==='awd'?4:3;
+      if(tick%cadence===0||Math.random()<(selectedCar==='awd'?.55:.38))launchControlPop();
+    },selectedCar==='dc5'?95:selectedCar==='awd'?125:110);
   }catch{stopLaunchControl()}
 }
-function launchSound(){if(!soundEnabled||!audioCtx||!masterGain)return;try{const t=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain(),filter=audioCtx.createBiquadFilter();o.type='sawtooth';o.frequency.setValueAtTime(120,t);o.frequency.exponentialRampToValueAtTime(330,t+.32);o.frequency.setValueAtTime(195,t+.34);o.frequency.exponentialRampToValueAtTime(420,t+.7);filter.type='lowpass';filter.frequency.value=1000;g.gain.setValueAtTime(.055,t);g.gain.exponentialRampToValueAtTime(.001,t+.85);o.connect(filter).connect(g).connect(masterGain);o.onended=()=>{o.disconnect();filter.disconnect();g.disconnect()};o.start(t);o.stop(t+.86)}catch{}}
+function launchSound(){
+  if(!soundEnabled||!audioCtx||!masterGain)return;
+  try{
+    const p=garageCars[selectedCar].sound,t=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain(),filter=audioCtx.createBiquadFilter();
+    o.type=selectedCar==='awd'?'square':'sawtooth';
+    o.frequency.setValueAtTime(p.launch1,t);
+    o.frequency.exponentialRampToValueAtTime(p.launch2,t+.32);
+    o.frequency.setValueAtTime(p.launch1*1.5,t+.34);
+    o.frequency.exponentialRampToValueAtTime(p.launch2*1.18,t+.7);
+    filter.type='lowpass';filter.frequency.value=selectedCar==='dc5'?1350:selectedCar==='awd'?850:1050;
+    g.gain.setValueAtTime(selectedCar==='awd'?.065:.055,t);
+    g.gain.exponentialRampToValueAtTime(.001,t+.85);
+    o.connect(filter).connect(g).connect(masterGain);
+    o.onended=()=>{o.disconnect();filter.disconnect();g.disconnect()};
+    o.start(t);o.stop(t+.86);
+  }catch{}
+}
 function renderSound(){const b=$('sound-toggle');b.textContent=soundEnabled?'Sound on':'Sound off';b.setAttribute('aria-pressed',String(soundEnabled))}
 $('sound-toggle').addEventListener('click',()=>{soundEnabled=!soundEnabled;try{localStorage.setItem('drag-tree-sound',soundEnabled?'on':'off')}catch{}if(!soundEnabled){stopEngine();if(masterGain)masterGain.gain.value=0}else{unlockAudio();if(masterGain)masterGain.gain.value=.45;sound(660,.1)}renderSound()});renderSound();
 
@@ -418,10 +450,10 @@ const opponents={rookie:{name:'Rookie',min:.22,max:.48},street:{name:'Street Rac
 
 
 const garageCars={
-  ek:{name:'CIVIC EK K24',icon:'🏁',spec:'FWD · K24 · 8,500 RPM launch',launchRpm:8500},
-  dc5:{name:'DC5 TYPE R',icon:'⚡',spec:'FWD · K-SERIES · 8,800 RPM launch',launchRpm:8800},
-  eg:{name:'CIVIC EG',icon:'🔥',spec:'FWD · LIGHTWEIGHT · 8,600 RPM launch',launchRpm:8600},
-  awd:{name:'AWD K-SERIES',icon:'💥',spec:'AWD · BOOSTED · 7,500 RPM launch',launchRpm:7500}
+  ek:{name:'CIVIC EK K24',icon:'🏁',spec:'FWD · K24 · 8,500 RPM launch',launchRpm:8500,sound:{idle1:72,idle2:144,filter:760,pulse:26,lc1:210,lc2:420,lcSub:105,lcFilter:1550,pop:175,launch1:135,launch2:360}},
+  dc5:{name:'DC5 TYPE R',icon:'⚡',spec:'FWD · K-SERIES · 8,800 RPM launch',launchRpm:8800,sound:{idle1:82,idle2:164,filter:980,pulse:30,lc1:236,lc2:472,lcSub:118,lcFilter:1850,pop:235,launch1:155,launch2:420}},
+  eg:{name:'CIVIC EG',icon:'🔥',spec:'FWD · LIGHTWEIGHT · 8,600 RPM launch',launchRpm:8600,sound:{idle1:66,idle2:132,filter:700,pulse:24,lc1:198,lc2:396,lcSub:99,lcFilter:1350,pop:145,launch1:125,launch2:335}},
+  awd:{name:'AWD K-SERIES',icon:'💥',spec:'AWD · BOOSTED · 7,500 RPM launch',launchRpm:7500,sound:{idle1:58,idle2:116,filter:560,pulse:20,lc1:168,lc2:336,lcSub:84,lcFilter:1150,pop:110,launch1:105,launch2:300}}
 };
 let selectedCar='ek';
 try{
