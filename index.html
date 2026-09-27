@@ -994,6 +994,19 @@ async function signOutGoogle(){
 async function handleGoogleOAuthReturn(){
   const hashParams=new URLSearchParams(location.hash.startsWith('#')?location.hash.slice(1):'');
   const queryParams=new URLSearchParams(location.search);
+  const oauthError=hashParams.get('error_description')||queryParams.get('error_description')||hashParams.get('error')||queryParams.get('error');
+  if(oauthError){
+    clearStoredSbSession();
+    renderGoogleAuth(null);
+    const el=$('google-auth-status');
+    if(el){
+      el.textContent='Google sign-in failed: '+oauthError;
+      el.className='auth-status error';
+    }
+    history.replaceState(null,'',location.pathname+'#profile');
+    return null;
+  }
+
   const accessToken=hashParams.get('access_token')||queryParams.get('access_token');
   const refreshToken=hashParams.get('refresh_token')||queryParams.get('refresh_token');
   if(accessToken){
