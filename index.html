@@ -69,10 +69,14 @@ let rpm=1000,rpmTarget=1000,rpmRAF=0,revStart=0;
 function paintRPM(value){
   rpm = Math.max(1000, Math.min(11000, value));
 
-  const pct = (rpm - 1000) / (11000 - 1000); // 0 to 1
-  const angle = 135 + (pct * 270); // sweep from 1 to 11
+  const rpmStep = (rpm - 1000) / 1000;
+  const startAngle = -135;
+  const degreesPerStep = 27;
+  const angle = startAngle + (rpmStep * degreesPerStep);
+  const pct = ((rpm - 1000) / 10000) * 100;
 
-  tachNeedle.style.transform = 'rotate(' + angle + 'deg)';
+  tachDial.style.setProperty('--rpm-pct', pct.toFixed(1));
+  tachNeedle.style.transform = 'rotate(' + angle.toFixed(1) + 'deg)';
   rpmValue.textContent = Math.round(rpm);
 
   shiftLights.forEach((l,i)=>{
