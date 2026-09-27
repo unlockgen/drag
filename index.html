@@ -239,18 +239,38 @@ function startEngine(){
   }
   try{const t=audioCtx.currentTime,a=audioCtx.createOscillator(),b=audioCtx.createOscillator(),filter=audioCtx.createBiquadFilter(),g=audioCtx.createGain(),pulse=audioCtx.createOscillator(),depth=audioCtx.createGain();a.type='sawtooth';b.type='triangle';a.frequency.setValueAtTime(65,t);a.frequency.exponentialRampToValueAtTime(118,t+.5);b.frequency.setValueAtTime(130,t);b.frequency.exponentialRampToValueAtTime(238,t+.5);filter.type='lowpass';filter.frequency.value=680;g.gain.value=.045;pulse.frequency.value=24;depth.gain.value=8;pulse.connect(depth);depth.connect(a.frequency);a.connect(filter);b.connect(filter);filter.connect(g).connect(masterGain);engineNodes=[a,b,pulse,depth,filter,g];a.start();b.start();pulse.start()}catch{stopEngine()}
 }
-function launchControlPop(){
-  if(!soundEnabled||!audioCtx||!masterGain)return;
+function launchControlPop(intensity=1){
+  if(!soundEnabled||!audioCtx||!masterGain||audioCtx.state!=='running')return;
   try{
     const t=audioCtx.currentTime;
-    const buffer=audioCtx.createBuffer(1,Math.floor(audioCtx.sampleRate*.055),audioCtx.sampleRate);
+    const len=Math.floor(audioCtx.sampleRate*(.045+Math.random()*.025));
+    const buffer=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
     const data=buffer.getChannelData(0);
-    for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*(1-i/data.length);
-    const src=audioCtx.createBufferSource(),filter=audioCtx.createBiquadFilter(),g=audioCtx.createGain();
-    src.buffer=buffer;filter.type='bandpass';filter.frequency.value=120+Math.random()*130;filter.Q.value=.8;
-    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.13,t+.004);g.gain.exponentialRampToValueAtTime(.001,t+.05);
-    src.connect(filter).connect(g).connect(masterGain);src.start(t);src.stop(t+.06);
+    for(let i=0;i<len;i++){
+      const env=Math.pow(1-i/len,2.2);
+      data[i]=(Math.random()*2-1)*env;
+    }
+    const src=audioCtx.createBufferSource();
+    const hp=audioCtx.createBiquadFilter();
+    const bp=audioCtx.createBiquadFilter();
+    const g=audioCtx.createGain();
+    hp.type='highpass';hp.frequency.value=55;
+    bp.type='bandpass';bp.frequency.value=170+Math.random()*260;bp.Q.value=.65;
+    g.gain.setValueAtTime(.0001,t);
+    g.gain.exponentialRampToValueAtTime(.10*intensity,t+.002);
+    g.gain.exponentialRampToValueAtTime(.001,t+.05);
+    src.buffer=buffer;
+    src.connect(hp).connect(bp).connect(g).connect(masterGain);
+    src.start(t);src.stop(t+.075);
   }catch{}
+}
+function makeEngineDrive(amount=1.7){
+  const curve=new Float32Array(1024);
+  for(let i=0;i<curve.length;i++){
+    const x=i*2/(curve.length-1)-1;
+    curve[i]=Math.tanh(x*amount);
+  }
+  return curve;
 }
 function startLaunchControl(){
   stopLaunchControl();
@@ -261,28 +281,95 @@ function startLaunchControl(){
   }
   try{
     const t=audioCtx.currentTime;
-    const a=audioCtx.createOscillator(),b=audioCtx.createOscillator(),sub=audioCtx.createOscillator();
-    const mix=audioCtx.createGain(),cut=audioCtx.createGain(),filter=audioCtx.createBiquadFilter();
-    a.type='sawtooth';b.type='square';sub.type='triangle';
-    a.frequency.value=196;b.frequency.value=392;sub.frequency.value=98;
-    filter.type='lowpass';filter.frequency.value=1450;filter.Q.value=1.2;
-    mix.gain.value=.035;
-    cut.gain.setValueAtTime(.9,t);
-    const step=.045;
-    for(let i=0;i<120;i++){
-      const tt=t+i*step;
-      cut.gain.setValueAtTime(i%2===0?.92:.16,tt);
-    }
-    a.connect(filter);b.connect(filter);sub.connect(filter);filter.connect(mix).connect(cut).connect(masterGain);
-    a.start();b.start();sub.start();
-    launchControlNodes=[a,b,sub,filter,mix,cut];
+    const firingHz=8500/60*2; // four-stroke 4-cylinder firing pulse rate
+    const fundamental=audioCtx.createOscillator();
+    const harmonic2=audioCtx.createOscillator();
+    const harmonic3=audioCtx.createOscillator();
+    const intake=audioCtx.createOscillator();
+    const rumble=audioCtx.createOscillator();
+    const pulse=audioCtx.createOscillator();
+    const pulseDepth=audioCtx.createGain();
+    const engineMix=audioCtx.createGain();
+    const drive=audioCtx.createWaveShaper();
+    const body=audioCtx.createBiquadFilter();
+    const presence=audioCtx.createBiquadFilter();
+    const limiterGate=audioCtx.createGain();
+    const compressor=audioCtx.createDynamicsCompressor();
+
+    fundamental.type='sawtooth';
+    harmonic2.type='triangle';
+    harmonic3.type='sine';
+    intake.type='sawtooth';
+    rumble.type='triangle';
+    pulse.type='square';
+
+    fundamental.frequency.value=firingHz;
+    harmonic2.frequency.value=firingHz*2.01;
+    harmonic3.frequency.value=firingHz*3.02;
+    intake.frequency.value=firingHz*.5;
+    rumble.frequency.value=firingHz*.25;
+
+    // Small frequency movement keeps it from sounding like one fixed electronic note.
+    pulse.frequency.value=31;
+    pulseDepth.gain.value=3.8;
+    pulse.connect(pulseDepth);
+    pulseDepth.connect(fundamental.frequency);
+    pulseDepth.connect(intake.frequency);
+
+    engineMix.gain.value=.034;
+    drive.curve=makeEngineDrive(1.9);
+    drive.oversample='2x';
+
+    body.type='lowpass';
+    body.frequency.value=2450;
+    body.Q.value=.55;
+    presence.type='peaking';
+    presence.frequency.value=920;
+    presence.Q.value=.9;
+    presence.gain.value=4.5;
+
+    limiterGate.gain.setValueAtTime(.95,t);
+    compressor.threshold.value=-16;
+    compressor.knee.value=12;
+    compressor.ratio.value=5;
+    compressor.attack.value=.003;
+    compressor.release.value=.08;
+
+    fundamental.connect(engineMix);
+    harmonic2.connect(engineMix);
+    harmonic3.connect(engineMix);
+    intake.connect(engineMix);
+    rumble.connect(engineMix);
+    engineMix.connect(drive).connect(body).connect(presence).connect(limiterGate).connect(compressor).connect(masterGain);
+
+    fundamental.start();harmonic2.start();harmonic3.start();intake.start();rumble.start();pulse.start();
+
+    launchControlNodes=[fundamental,harmonic2,harmonic3,intake,rumble,pulse,pulseDepth,engineMix,drive,body,presence,limiterGate,compressor];
+
     let tick=0;
     launchControlTimer=setInterval(()=>{
-      if(!held||!(phase==='arming'||phase==='countdown'||phase==='green')){stopLaunchControl();return}
+      if(!held||!(phase==='arming'||phase==='countdown'||phase==='green')){
+        stopLaunchControl();
+        return;
+      }
+      if(!audioCtx||audioCtx.state!=='running')return;
       tick++;
-      if(tick%3===0||Math.random()<.42)launchControlPop();
-    },115);
-  }catch{stopLaunchControl()}
+      const now=audioCtx.currentTime;
+
+      // Short irregular ignition cuts mimic a two-step/launch limiter.
+      if(tick%2===0){
+        limiterGate.gain.cancelScheduledValues(now);
+        limiterGate.gain.setValueAtTime(.9,now);
+        limiterGate.gain.linearRampToValueAtTime(.18,now+.012);
+        limiterGate.gain.linearRampToValueAtTime(.92,now+.034);
+      }
+
+      // Exhaust crackles are irregular rather than metronomic.
+      if(tick%3===0||Math.random()<.34)launchControlPop(.75+Math.random()*.55);
+    },92);
+  }catch{
+    stopLaunchControl();
+  }
 }
 function launchSound(){if(!soundEnabled||!audioCtx||!masterGain)return;try{const t=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain(),filter=audioCtx.createBiquadFilter();o.type='sawtooth';o.frequency.setValueAtTime(120,t);o.frequency.exponentialRampToValueAtTime(330,t+.32);o.frequency.setValueAtTime(195,t+.34);o.frequency.exponentialRampToValueAtTime(420,t+.7);filter.type='lowpass';filter.frequency.value=1000;g.gain.setValueAtTime(.055,t);g.gain.exponentialRampToValueAtTime(.001,t+.85);o.connect(filter).connect(g).connect(masterGain);o.onended=()=>{o.disconnect();filter.disconnect();g.disconnect()};o.start(t);o.stop(t+.86)}catch{}}
 function renderSound(){const b=$('sound-toggle');b.textContent=soundEnabled?'Sound on':'Sound off';b.setAttribute('aria-pressed',String(soundEnabled))}
