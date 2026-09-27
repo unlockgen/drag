@@ -193,8 +193,54 @@ let soundEnabled=true,masterGain=null,engineNodes=null;
 try{soundEnabled=localStorage.getItem('drag-tree-sound')!=='off'}catch{}
 function unlockAudio(){if(!soundEnabled)return false;try{audioCtx??=new(window.AudioContext||window.webkitAudioContext)();if(!masterGain){masterGain=audioCtx.createGain();masterGain.gain.value=.45;masterGain.connect(audioCtx.destination)}if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});return true}catch{return false}}
 function sound(frequency=660,duration=.075,wave='sine'){if(!soundEnabled||!audioCtx||!masterGain)return;try{const o=audioCtx.createOscillator(),g=audioCtx.createGain(),t=audioCtx.currentTime;o.type=wave;o.frequency.value=frequency;g.gain.setValueAtTime(.12,t);g.gain.exponentialRampToValueAtTime(.001,t+duration);o.connect(g).connect(masterGain);o.onended=()=>{o.disconnect();g.disconnect()};o.start(t);o.stop(t+duration)}catch{}}
-function stopEngine(){if(!engineNodes)return;for(const n of engineNodes){try{n.stop?.();n.disconnect()}catch{}}engineNodes=null}
+let launchControlNodes=null,launchControlTimer=null;
+function stopLaunchControl(){
+  if(launchControlTimer){clearInterval(launchControlTimer);launchControlTimer=null}
+  if(launchControlNodes){for(const n of launchControlNodes){try{n.stop?.();n.disconnect?.()}catch{}}launchControlNodes=null}
+}
+function stopEngine(){stopLaunchControl();if(!engineNodes)return;for(const n of engineNodes){try{n.stop?.();n.disconnect()}catch{}}engineNodes=null}
 function startEngine(){stopEngine();if(!unlockAudio())return;try{const t=audioCtx.currentTime,a=audioCtx.createOscillator(),b=audioCtx.createOscillator(),filter=audioCtx.createBiquadFilter(),g=audioCtx.createGain(),pulse=audioCtx.createOscillator(),depth=audioCtx.createGain();a.type='sawtooth';b.type='triangle';a.frequency.setValueAtTime(65,t);a.frequency.exponentialRampToValueAtTime(118,t+.5);b.frequency.setValueAtTime(130,t);b.frequency.exponentialRampToValueAtTime(238,t+.5);filter.type='lowpass';filter.frequency.value=680;g.gain.value=.045;pulse.frequency.value=24;depth.gain.value=8;pulse.connect(depth);depth.connect(a.frequency);a.connect(filter);b.connect(filter);filter.connect(g).connect(masterGain);engineNodes=[a,b,pulse,depth,filter,g];a.start();b.start();pulse.start()}catch{stopEngine()}}
+function launchControlPop(){
+  if(!soundEnabled||!audioCtx||!masterGain)return;
+  try{
+    const t=audioCtx.currentTime;
+    const buffer=audioCtx.createBuffer(1,Math.floor(audioCtx.sampleRate*.055),audioCtx.sampleRate);
+    const data=buffer.getChannelData(0);
+    for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*(1-i/data.length);
+    const src=audioCtx.createBufferSource(),filter=audioCtx.createBiquadFilter(),g=audioCtx.createGain();
+    src.buffer=buffer;filter.type='bandpass';filter.frequency.value=120+Math.random()*130;filter.Q.value=.8;
+    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.13,t+.004);g.gain.exponentialRampToValueAtTime(.001,t+.05);
+    src.connect(filter).connect(g).connect(masterGain);src.start(t);src.stop(t+.06);
+  }catch{}
+}
+function startLaunchControl(){
+  stopLaunchControl();
+  if(!unlockAudio())return;
+  try{
+    const t=audioCtx.currentTime;
+    const a=audioCtx.createOscillator(),b=audioCtx.createOscillator(),sub=audioCtx.createOscillator();
+    const mix=audioCtx.createGain(),cut=audioCtx.createGain(),filter=audioCtx.createBiquadFilter();
+    a.type='sawtooth';b.type='square';sub.type='triangle';
+    a.frequency.value=196;b.frequency.value=392;sub.frequency.value=98;
+    filter.type='lowpass';filter.frequency.value=1450;filter.Q.value=1.2;
+    mix.gain.value=.035;
+    cut.gain.setValueAtTime(.9,t);
+    const step=.045;
+    for(let i=0;i<120;i++){
+      const tt=t+i*step;
+      cut.gain.setValueAtTime(i%2===0?.92:.16,tt);
+    }
+    a.connect(filter);b.connect(filter);sub.connect(filter);filter.connect(mix).connect(cut).connect(masterGain);
+    a.start();b.start();sub.start();
+    launchControlNodes=[a,b,sub,filter,mix,cut];
+    let tick=0;
+    launchControlTimer=setInterval(()=>{
+      if(!held||!(phase==='arming'||phase==='countdown'||phase==='green')){stopLaunchControl();return}
+      tick++;
+      if(tick%3===0||Math.random()<.42)launchControlPop();
+    },115);
+  }catch{stopLaunchControl()}
+}
 function launchSound(){if(!soundEnabled||!audioCtx||!masterGain)return;try{const t=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain(),filter=audioCtx.createBiquadFilter();o.type='sawtooth';o.frequency.setValueAtTime(120,t);o.frequency.exponentialRampToValueAtTime(330,t+.32);o.frequency.setValueAtTime(195,t+.34);o.frequency.exponentialRampToValueAtTime(420,t+.7);filter.type='lowpass';filter.frequency.value=1000;g.gain.setValueAtTime(.055,t);g.gain.exponentialRampToValueAtTime(.001,t+.85);o.connect(filter).connect(g).connect(masterGain);o.onended=()=>{o.disconnect();filter.disconnect();g.disconnect()};o.start(t);o.stop(t+.86)}catch{}}
 function renderSound(){const b=$('sound-toggle');b.textContent=soundEnabled?'Sound on':'Sound off';b.setAttribute('aria-pressed',String(soundEnabled))}
 $('sound-toggle').addEventListener('click',()=>{soundEnabled=!soundEnabled;try{localStorage.setItem('drag-tree-sound',soundEnabled?'on':'off')}catch{}if(!soundEnabled){stopEngine();if(masterGain)masterGain.gain.value=0}else{unlockAudio();if(masterGain)masterGain.gain.value=.45;sound(660,.1)}renderSound()});renderSound();
@@ -493,8 +539,8 @@ $('race-result-overlay').addEventListener('click',e=>{if(e.target===$('race-resu
 
 function record(label,red,rt){stats.runs++;if(red)stats.reds++;if(rt!==null&&(stats.best===null||rt<stats.best))stats.best=rt;stats.history.unshift({n:stats.runs,label,red});stats.history=stats.history.slice(0,5);save();render();addScore(red,rt);finishRound(red,rt);updateAchievements(red,rt);showRaceResultOverlay(label,red,rt)}
 function green(){if(phase!=='countdown')return;for(const id of ['a1','a2','a3'])pair(id,null);pair('green','green');litGreen=performance.now();phase='green';setView('GO!','—.———','Release now!');sound(850,.11);vibrate(20);if(isRival())later(()=>{if(phase==='green'){$('rival-rt').textContent='+'+rivalRT.toFixed(3)+' s';$('rival-message').textContent=opponents[difficulty.value].name+' launched!'}},rivalRT*1000);if(isTournament())later(()=>{if(phase==='green'){$('tournament-message').textContent=tournamentNames[tournamentOpponent()]+' launched at +'+rivalRT.toFixed(3)+' s!'}},rivalRT*1000);later(()=>{if(phase==='green'){phase='done';held=false;stopEngine();settleTach();launch.classList.remove('held');setView('TOO LATE','+1.800+','Hold to try again.');record('TOO LATE',false,null)}},1800)}
-function begin(){if(!held||phase!=='arming')return;phase='countdown';setView('STAGED','—.———','Keep holding. Release on green.');const delay=650+Math.random()*850, start=performance.now();targetGreen=start+delay+(mode.value==='pro'?400:1500);const light=n=>{if(phase==='countdown'){if(mode.value==='sportsman'&&n>1)pair('a'+(n-1),null);pair('a'+n,'amber');sound(480,.055)}};if(mode.value==='pro'){later(()=>{if(phase==='countdown'){for(const id of ['a1','a2','a3'])pair(id,'amber');sound(480,.055)}},delay);later(green,delay+400)}else{later(()=>light(1),delay);later(()=>light(2),delay+500);later(()=>light(3),delay+1000);later(green,delay+1500)}}
-function press(event){if(event)event.preventDefault();if(launch.disabled||held||phase==='arming'||phase==='countdown'||phase==='green')return;clearTimers();clearLights();prepareRival();held=true;startEngine();startTach();phase='arming';launch.classList.add('held');setView('PRE-STAGE','—.———','Keep holding to stage.');pair('pre','white');if(event?.pointerId!==undefined){pointerId=event.pointerId;launch.setPointerCapture?.(pointerId)}later(()=>{if(held&&phase==='arming'){pair('stage','white');setView('STAGED','—.———','Keep holding for the countdown.')}},300);later(begin,650)}
+function begin(){if(!held||phase!=='arming')return;phase='countdown';startLaunchControl();setView('STAGED','—.———','Launch control active · release on green.');const delay=650+Math.random()*850, start=performance.now();targetGreen=start+delay+(mode.value==='pro'?400:1500);const light=n=>{if(phase==='countdown'){if(mode.value==='sportsman'&&n>1)pair('a'+(n-1),null);pair('a'+n,'amber');sound(480,.055)}};if(mode.value==='pro'){later(()=>{if(phase==='countdown'){for(const id of ['a1','a2','a3'])pair(id,'amber');sound(480,.055)}},delay);later(green,delay+400)}else{later(()=>light(1),delay);later(()=>light(2),delay+500);later(()=>light(3),delay+1000);later(green,delay+1500)}}
+function press(event){if(event)event.preventDefault();if(launch.disabled||held||phase==='arming'||phase==='countdown'||phase==='green')return;clearTimers();clearLights();prepareRival();held=true;startEngine();startTach();phase='arming';launch.classList.add('held');setView('PRE-STAGE','—.———','Keep holding to stage.');pair('pre','white');if(event?.pointerId!==undefined){pointerId=event.pointerId;launch.setPointerCapture?.(pointerId)}later(()=>{if(held&&phase==='arming'){pair('stage','white');startLaunchControl();setView('STAGED','—.———','Launch control active · keep holding for the countdown.')}},300);later(begin,650)}
 function release(event){if(event)event.preventDefault();if(!held||event?.pointerId!==undefined&&pointerId!==event.pointerId)return;pointerId=null;held=false;stopEngine();launch.classList.remove('held');if(phase==='arming'){clearTimers();clearLights();phase='idle';lockSettings(false);setView('NOT STAGED','—.———','Hold longer to stage.');return}if(phase==='countdown'){const early=(performance.now()-targetGreen)/1000;clearTimers();phase='done';for(const id of ['a1','a2','a3'])pair(id,null);pair('red','red');const rt=Math.min(-.001,early);setView('RED LIGHT',rt.toFixed(3),'You released before green. Hold to retry.','red-text');sound(150,.32,'square');vibrate([60,40,60]);record('RED '+rt.toFixed(3),true,null);return}if(phase==='green'){clearTimers();phase='done';const rt=(performance.now()-litGreen)/1000;const label='+'+rt.toFixed(3);setView(rt<.05?'KILLER LIGHT!':rt<.1?'GREAT LIGHT!':rt<.2?'GOOD LIGHT':'REACTION TIME',label,'Hold to run again.','green-text');triggerLaunchFX();record(label,false,rt);launchSound()}}
 launch.addEventListener('pointerdown',press);launch.addEventListener('pointerup',release);launch.addEventListener('pointercancel',()=>{if(phase==='arming'||phase==='countdown'||phase==='green'){clearTimers();held=false;stopEngine();settleTach();phase='idle';pointerId=null;launch.classList.remove('held');clearLights();lockSettings(false);setView('READY TO STAGE','—.———','Hold the button to stage. Release on green.')}});launch.addEventListener('keydown',event=>{if((event.code==='Space'||event.code==='Enter')&&!event.repeat)press(event)});launch.addEventListener('keyup',event=>{if(event.code==='Space'||event.code==='Enter')release(event)});window.addEventListener('blur',()=>{stopEngine();if(held){clearTimers();held=false;stopEngine();settleTach();phase='idle';pointerId=null;launch.classList.remove('held');clearLights();lockSettings(false);setView('READY TO STAGE','—.———','Hold the button to stage. Release on green.')}});mode.addEventListener('change',()=>{if(isTournament()){tournament=newTournament();saveTournament();renderMatch()}if(!held){clearTimers();clearLights();phase='idle';setView('READY TO STAGE','—.———','Hold the button to stage. Release on green.')}});$('reset').addEventListener('click',()=>{stats={runs:0,reds:0,best:null,history:[]};save();render()});render();if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 })();
