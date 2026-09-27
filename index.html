@@ -298,10 +298,11 @@ const rivalCards=[...document.querySelectorAll('[data-rival]')];
 const homeModeCards=[...document.querySelectorAll('[data-home-mode]')];
 function updateRaceNightDashboard(){
   if($('dash-best'))$('dash-best').textContent=stats.best===null?'—':'+'+stats.best.toFixed(3);
-  if($('dash-streak'))$('dash-streak').textContent=achievementState?.streak??0;
+  if($('dash-streak'))$('dash-streak').textContent=$('clean-streak')?.textContent||'0';
   if($('dash-achievements')){
-    const unlocked=typeof achievementDefs!=='undefined'?achievementDefs.filter(b=>achievementState.unlocked[b.id]).length:0;
-    $('dash-achievements').textContent=unlocked+'/'+(typeof achievementDefs!=='undefined'?achievementDefs.length:6);
+    const countText=$('achievement-count')?.textContent||'0 / 6 UNLOCKED';
+    const m=countText.match(/(\d+)\s*\/\s*(\d+)/);
+    $('dash-achievements').textContent=m?m[1]+'/'+m[2]:'0/6';
   }
   rivalCards.forEach(card=>card.classList.toggle('selected',card.dataset.rival===difficulty.value));
   homeModeCards.forEach(card=>card.classList.toggle('active',card.dataset.homeMode===playMode.value));
