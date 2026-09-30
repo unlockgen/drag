@@ -920,17 +920,59 @@ function getSavedRacerUsername(user){
   if(!key)return '';
   try{return (localStorage.getItem(key)||'').trim()}catch{return ''}
 }
-function saveRacerUsername(user,name){
+function saveRacerUsernameLocal(user,name){
   const key=racerUsernameKey(user);
   if(!key)return;
   try{localStorage.setItem(key,name)}catch{}
 }
-function openUsernameSetup(user){
+async function loadServerRacerProfile(user){
+  if(!user?.id)return null;
+  const session=await refreshStoredSbSession();
+  if(!session?.access_token)return null;
+  try{
+    const rows=await sbRequest('/rest/v1/crj_profiles?select=user_id,username,display_name,avatar_url,country&user_id=eq.'+encodeURIComponent(user.id),{
+      headers:{Authorization:'Bearer '+session.access_token}
+    });
+    return Array.isArray(rows)&&rows[0]?rows[0]:null;
+  }catch{return null}
+}
+async function saveServerRacerProfile(user,username){
+  const session=await refreshStoredSbSession();
+  if(!session?.access_token)throw new Error('Your session expired. Please sign in again.');
+  const meta=user.user_metadata||{};
+  const body={
+    user_id:user.id,
+    username,
+    display_name:(meta.full_name||meta.name||'').slice(0,80)||null,
+    avatar_url:(meta.avatar_url||meta.picture||'').slice(0,500)||null,
+    country:$('racer-country')?.value||'JM',
+    updated_at:new Date().toISOString()
+  };
+  const r=await fetch(apiBase()+'/rest/v1/crj_profiles?on_conflict=user_id',{
+    method:'POST',
+    headers:{
+      apikey:window.CHURCHRACERS_SUPABASE.key,
+      Authorization:'Bearer '+session.access_token,
+      'Content-Type':'application/json',
+      Prefer:'resolution=merge-duplicates,return=representation'
+    },
+    body:JSON.stringify(body)
+  });
+  let data;try{data=await r.json()}catch{}
+  if(!r.ok){
+    const msg=data?.message||data?.details||'Could not save racer profile.';
+    if(String(msg).toLowerCase().includes('duplicate'))throw new Error('That username is already taken.');
+    throw new Error(msg);
+  }
+  saveRacerUsernameLocal(user,username);
+  return Array.isArray(data)?data[0]:data;
+}
+function openUsernameSetup(user,existing=''){
   const modal=$('username-setup');
   if(!modal||!user)return;
   modal.dataset.userId=user.id||'';
   const meta=user.user_metadata||{};
-  $('username-input').value=getSavedRacerUsername(user)||'';
+  $('username-input').value=existing||getSavedRacerUsername(user)||'';
   if(!$('username-input').value){
     const suggestion=(meta.preferred_username||meta.full_name||meta.name||'').replace(/[^a-zA-Z0-9_ -]/g,'').trim().slice(0,24);
     $('username-input').value=suggestion;
@@ -939,33 +981,41 @@ function openUsernameSetup(user){
   modal.hidden=false;
   setTimeout(()=>$('username-input').focus(),50);
 }
-function applyGoogleUserToProfile(user){
+function applyGoogleUserToProfile(user,serverProfile=null){
   if(!user)return;
-  const savedUsername=getSavedRacerUsername(user);
   const meta=user.user_metadata||{};
+  const savedUsername=(serverProfile?.username||getSavedRacerUsername(user)||'').trim();
+  if(savedUsername)saveRacerUsernameLocal(user,savedUsername);
   const name=(savedUsername||meta.full_name||meta.name||'Racer').trim();
   if($('racer-name')){
     $('racer-name').value=name.slice(0,24);
     try{localStorage.setItem('crj-profile',JSON.stringify(profile()))}catch{}
   }
+  const avatar=serverProfile?.avatar_url||meta.avatar_url||meta.picture||'';
+  if(avatar&&$('profile-avatar')){
+    $('profile-avatar').innerHTML='';
+    const img=document.createElement('img');
+    img.src=avatar;img.alt='';img.style.cssText='width:100%;height:100%;border-radius:inherit;object-fit:cover';
+    $('profile-avatar').append(img);
+  }
   syncProfilePage();
 }
-function renderGoogleAuth(user){
+function renderGoogleAuth(user,serverProfile=null){
   const out=$('google-signed-out'),inside=$('google-signed-in'),statusEl=$('google-auth-status');
   if(!out||!inside)return;
   const signedIn=!!user;
   out.hidden=signedIn;inside.hidden=!signedIn;
   if(signedIn){
     const meta=user.user_metadata||{};
-    const racerName=getSavedRacerUsername(user);
+    const racerName=serverProfile?.username||getSavedRacerUsername(user);
     $('google-name').textContent=racerName||meta.full_name||meta.name||'Google Racer';
     $('google-email').textContent=user.email||'';
-    const picture=meta.avatar_url||meta.picture||'';
+    const picture=serverProfile?.avatar_url||meta.avatar_url||meta.picture||'';
     if(picture){
       $('google-avatar').src=picture;
       $('google-avatar').hidden=false;
     }else $('google-avatar').hidden=true;
-    statusEl.textContent=racerName?'Google account connected · Racer profile ready.':'Google connected · choose your racer username.';
+    statusEl.textContent=racerName?'Google account connected · Racer profile synced.':'Google connected · choose your racer username.';
     statusEl.className='auth-status ok';
   }else{
     statusEl.textContent='';
@@ -1021,9 +1071,10 @@ async function handleGoogleOAuthReturn(){
   }
 
   const user=await getGoogleUser();
-  renderGoogleAuth(user);
-  applyGoogleUserToProfile(user);
-  if(user&&!getSavedRacerUsername(user))openUsernameSetup(user);
+  const serverProfile=user?await loadServerRacerProfile(user):null;
+  renderGoogleAuth(user,serverProfile);
+  applyGoogleUserToProfile(user,serverProfile);
+  if(user&&!serverProfile?.username)openUsernameSetup(user);
   return user;
 }
 $('google-signin')?.addEventListener('click',signInWithGoogle);
@@ -1034,10 +1085,19 @@ $('username-save')?.addEventListener('click',async()=>{
   const name=($('username-input').value||'').trim();
   if(name.length<3){$('username-error').textContent='Username must be at least 3 characters.';return}
   if(!/^[a-zA-Z0-9_ -]+$/.test(name)){$('username-error').textContent='Use letters, numbers, spaces, _ or - only.';return}
-  saveRacerUsername(user,name.slice(0,24));
-  $('username-setup').hidden=true;
-  applyGoogleUserToProfile(user);
-  renderGoogleAuth(user);
+  $('username-save').disabled=true;
+  $('username-save').textContent='SAVING…';
+  try{
+    const saved=await saveServerRacerProfile(user,name.slice(0,24));
+    $('username-setup').hidden=true;
+    applyGoogleUserToProfile(user,saved);
+    renderGoogleAuth(user,saved);
+  }catch(e){
+    $('username-error').textContent=e.message||'Could not save username.';
+  }finally{
+    $('username-save').disabled=false;
+    $('username-save').textContent='SAVE RACER NAME';
+  }
 });
 
 const pageConfig={
