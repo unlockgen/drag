@@ -616,9 +616,9 @@ function saveProfileCareer(){try{localStorage.setItem('crj-profile-career',JSON.
 
 let friend={runs:0,best:null},incoming=null;
 let match={you:0,rival:0,round:1,over:false},rivalRT=null;
-const tournamentNames=['You','Burnout Ben','Turbo Tia','Kingston Kev','Nitro Nia','St Ann Ace','Launch Leo','Redline Rae'];
+const tournamentNames=['You','User 1','User 2','User 3','User 4','User 5','User 6','Redline Rae'];
 let tournament=newTournament();
-function newTournament(){return {round:0,over:false,champion:false,started:false,bracket:[[[0,1],[2,3],[4,5],[6,7]],[[null,null],[null,null]],[[null,null]]],results:[[],[],[]],message:'Quarterfinal: take on Burnout Ben. Hold LAUNCH to stage.'}}
+function newTournament(){return {round:0,over:false,champion:false,started:false,bracket:[[[0,1],[2,3],[4,5],[6,7]],[[null,null],[null,null]],[[null,null]]],results:[[],[],[]],message:'Quarterfinal: take on User 1. Hold LAUNCH to stage.'}}
 function isTournament(){return playMode.value==='tournament'}
 function tournamentOpponent(){return tournament.bracket[tournament.round][0][1]}
 function cpuTime(){return Math.round((.06+Math.random()*.36)*1000)}
