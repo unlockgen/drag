@@ -655,7 +655,7 @@ function renderTournament(){const active=isTournament(),box=$('tournament-bracke
 function lane(id,side,state){const b=$(id+side);b.className='bulb'+(['pre','stage'].includes(id)?' small':'')+(state?' '+state:'')}
 function lockSettings(lock){$('racer-name').disabled=lock;$('racer-country').disabled=lock;playMode.disabled=lock;difficulty.disabled=lock;mode.disabled=lock||(isFriend()&&(friend.runs>0||!!incoming));$('friend-name').disabled=lock;$('friend-retry').disabled=lock}
 function renderMatch(){renderFriend();updateRaceNightDashboard();if($('quarter-panel'))$('quarter-panel').hidden=!isQuarter();const o=opponents[difficulty.value];$('player-score').textContent=match.you;$('rival-score').textContent=match.rival;$('opponent-name').textContent=o.name.toUpperCase()+' · RIGHT LANE';$('round-label').textContent=match.over?'MATCH COMPLETE':'ROUND '+match.round+' · FIRST TO 3';$('rematch').hidden=!match.over;launch.disabled=(isRival()&&match.over)||(isFriend()&&friend.runs>=5)||(isTournament()&&tournament.over)||quarterRunning;$('rival-content').hidden=!isRival();renderTournament();document.querySelector('.session-head span').textContent=isRival()?'RACE A RIVAL':isFriend()?'FRIEND CHALLENGE':isTournament()?'RACE NIGHT TOURNAMENT':isQuarter()?'1/4 MILE RACE':'REACTION PRACTICE'}
-function resetMatch(){friend={runs:0,best:null};$('share-fallback').hidden=true;clearTimers();stopEngine();held=false;pointerId=null;phase='idle';rivalRT=null;match={you:0,rival:0,round:1,over:false};clearLights();launch.classList.remove('held');lockSettings(false);$('player-rt').textContent='—';$('rival-rt').textContent='—';$('rival-message').textContent='Fastest clean reaction wins. A red light loses the round.';setView('READY TO STAGE','—.———','Hold the button to stage. Release on green.');renderMatch()}
+function resetMatch(){friend={runs:0,best:null};$('share-fallback').hidden=true;clearTimers();stopEngine();held=false;pointerId=null;phase='idle';rivalRT=null;match={you:0,rival:0,round:1,over:false};clearLights();launch.classList.remove('held');lockSettings(false);$('player-rt').textContent='—';$('rival-rt').textContent='—';$('rival-message').textContent='Fastest clean reaction wins. A red light loses the round.';setView('READY TO STAGE','—.———',isQuarter()?'Warm the tires, then hold LAUNCH to stage for a full 1/4-mile pass.':'Hold the button to stage. Release on green.');renderMatch()}
 function prepareRival(){lockSettings(true);if(isTournament()){tournament.started=true;saveTournament();const round=tournament.round;rivalRT=Math.round((Math.max(.045,.24-round*.055)+Math.random()*.16)*1000)/1000;tournament.message='Staged against '+tournamentNames[tournamentOpponent()]+' — release on green!';renderTournament();return}if(!isRival())return;const o=opponents[difficulty.value];rivalRT=Math.round((o.min+Math.random()*(o.max-o.min))*1000)/1000;$('player-rt').textContent='Staging…';$('rival-rt').textContent='Staging…';$('rival-message').textContent='Round '+match.round+' — beat '+o.name+' off the line.'}
 function finishTournament(red,rt){const round=tournament.round,player=red||rt===null?null:Math.round(rt*1000),opponent=tournamentOpponent(),cpu=Math.round(rivalRT*1000),tie=player!==null&&player===cpu,win=player!==null&&player<cpu;if(tie){tournament.message='Dead heat at '+formatTime(player)+'! Replay this heat.';status.textContent='DEAD HEAT';hint.textContent=tournament.message;saveTournament();renderMatch();return}tournament.results[round][0]={winner:win?0:opponent,times:[player,cpu]};if(round===0){for(let i=1;i<4;i++)tournament.results[0][i]=cpuMatch(tournament.bracket[0][i]);tournament.bracket[1]=[[win?0:opponent,tournament.results[0][1].winner],[tournament.results[0][2].winner,tournament.results[0][3].winner]]}else if(round===1){tournament.results[1][1]=cpuMatch(tournament.bracket[1][1]);tournament.bracket[2]=[[win?0:opponent,tournament.results[1][1].winner]]}if(win&&round<2){tournament.round++;tournament.message='You beat '+tournamentNames[opponent]+'! Next up: '+tournamentNames[tournamentOpponent()]+'.';status.textContent='YOU ADVANCE!'}else{tournament.over=true;tournament.champion=win;if(win){profileCareer.tournamentWins++;saveProfileCareer()}tournament.message=win?'You won Race Night! Three clean victories. Restart for another bracket.':(red?'Red light. ':rt===null?'Missed launch. ':'')+tournamentNames[opponent]+' advances. Restart for another bracket.';status.textContent=win?'TOURNAMENT CHAMPION!':'TOURNAMENT OVER'}hint.textContent=tournament.message;saveTournament();renderMatch()}
 function finishRound(red,rt){if(isTournament()){lockSettings(false);finishTournament(red,rt);return}if(isFriend()){finishFriend(red,rt);return}lockSettings(false);if(!isRival())return;const player=rt===null?null:Math.round(rt*1000)/1000;const tie=!red&&player!==null&&player===rivalRT;const win=!red&&player!==null&&player<rivalRT;const opponent=opponents[difficulty.value].name;$('player-rt').textContent=red?'RED LIGHT':player===null?'TOO LATE':'+'+player.toFixed(3)+' s';$('rival-rt').textContent='+'+rivalRT.toFixed(3)+' s';if(!tie){if(win)match.you++;else match.rival++;match.over=match.you===3||match.rival===3;if(match.over&&match.you===3){profileCareer.rivalWins++;saveProfileCareer()}if(!match.over)match.round++}const verdict=tie?'DEAD HEAT':win?'YOU WIN THE ROUND':opponent.toUpperCase()+' WINS';$('rival-message').textContent=match.over?(match.you===3?'You won the match!':'Match goes to '+opponent+'.')+' Final score: '+match.you+'–'+match.rival:tie?'Same reaction to the millisecond. Replay this round.':(red?'Red light — round lost. ':player===null?'No launch — round lost. ':'')+'Hold LAUNCH for the next round.';status.textContent=match.over?(match.you===3?'MATCH WINNER!':'REMATCH?'):verdict;hint.textContent=$('rival-message').textContent;if(red){lane('red','R',null)}renderMatch()}
@@ -806,7 +806,26 @@ function hideRaceResultOverlay(){
 $('race-result-close').addEventListener('click',hideRaceResultOverlay);
 $('race-result-overlay').addEventListener('click',e=>{if(e.target===$('race-result-overlay'))hideRaceResultOverlay()});
 
-function record(label,red,rt){stats.runs++;if(red)stats.reds++;if(rt!==null&&(stats.best===null||rt<stats.best))stats.best=rt;stats.history.unshift({n:stats.runs,label,red});stats.history=stats.history.slice(0,5);save();render();addScore(red,rt);finishRound(red,rt);updateAchievements(red,rt);showRaceResultOverlay(label,red,rt)}
+function record(label,red,rt){
+  stats.runs++;
+  if(red)stats.reds++;
+  if(rt!==null&&(stats.best===null||rt<stats.best))stats.best=rt;
+  stats.history.unshift({n:stats.runs,label,red});
+  stats.history=stats.history.slice(0,5);
+  save();
+  render();
+  addScore(red,rt);
+  updateAchievements(red,rt);
+  if(isQuarter()){
+    if(red){
+      lockSettings(false);
+      renderMatch();
+    }
+    return;
+  }
+  finishRound(red,rt);
+  showRaceResultOverlay(label,red,rt);
+}
 function green(){if(phase!=='countdown')return;for(const id of ['a1','a2','a3'])pair(id,null);pair('green','green');litGreen=performance.now();phase='green';setView('GO!','—.———','Release now!');sound(850,.11);vibrate(20);if(isRival())later(()=>{if(phase==='green'){$('rival-rt').textContent='+'+rivalRT.toFixed(3)+' s';$('rival-message').textContent=opponents[difficulty.value].name+' launched!'}},rivalRT*1000);if(isTournament())later(()=>{if(phase==='green'){$('tournament-message').textContent=tournamentNames[tournamentOpponent()]+' launched at +'+rivalRT.toFixed(3)+' s!'}},rivalRT*1000);later(()=>{if(phase==='green'){phase='done';held=false;stopEngine();settleTach();launch.classList.remove('held');setView('TOO LATE','+1.800+','Hold to try again.');record('TOO LATE',false,null)}},1800)}
 function begin(){if(!held||phase!=='arming')return;phase='countdown';startLaunchControl();setView('STAGED','—.———','Launch control active · release on green.');const delay=650+Math.random()*850, start=performance.now();targetGreen=start+delay+(mode.value==='pro'?400:1500);const light=n=>{if(phase==='countdown'){if(mode.value==='sportsman'&&n>1)pair('a'+(n-1),null);pair('a'+n,'amber');sound(480,.055)}};if(mode.value==='pro'){later(()=>{if(phase==='countdown'){for(const id of ['a1','a2','a3'])pair(id,'amber');sound(480,.055)}},delay);later(green,delay+400)}else{later(()=>light(1),delay);later(()=>light(2),delay+500);later(()=>light(3),delay+1000);later(green,delay+1500)}}
 
@@ -949,13 +968,18 @@ function finishQuarter(){
   cancelAnimationFrame(quarterRAF);
   $('quarter-you-slip').innerHTML=slipRows('YOU',quarterPlayer);
   $('quarter-rival-slip').innerHTML=slipRows('RIVAL',quarterRival);
-  const pTotal=(quarterPlayer.rt||0)+(quarterPlayer.splits['1320']?.et||99);
-  const rTotal=(quarterRival.rt||0)+(quarterRival.splits['1320']?.et||99);
+  const pET=quarterPlayer.splits['1320']?.et||99;
+  const rET=quarterRival.splits['1320']?.et||99;
+  const pTotal=(quarterPlayer.rt||0)+pET;
+  const rTotal=(quarterRival.rt||0)+rET;
   const win=pTotal<rTotal;
   const margin=Math.abs(pTotal-rTotal);
   $('quarter-result').textContent=(win?'🏆 YOU WIN':'RIVAL WINS')+' · MARGIN '+margin.toFixed(3)+' S';
   $('quarter-timeslip').hidden=false;
-  setView(win?'QUARTER MILE WIN':'QUARTER MILE RESULT',''+(quarterPlayer.splits['1320']?.et||0).toFixed(3)+' s','Full timeslip below. Hold to run again.',win?'green-text':'');
+  lockSettings(false);
+  renderMatch();
+  setView(win?'QUARTER MILE WIN':'QUARTER MILE RESULT',pET.toFixed(3)+' s','Full timeslip below. Hold to run again.',win?'green-text':'');
+  setTimeout(()=>showRaceResultOverlay(pET.toFixed(3),false,quarterPlayer.rt),250);
 }
 function quarterFrame(now){
   if(!quarterRunning)return;
@@ -968,14 +992,20 @@ function quarterFrame(now){
   quarterRAF=requestAnimationFrame(quarterFrame);
 }
 function startQuarterRace(rt){
+  hideRaceResultOverlay();
   $('quarter-timeslip').hidden=true;
-  $('quarter-you-car').style.left='4%';$('quarter-rival-car').style.left='4%';
+  $('quarter-you-car').style.left='4%';
+  $('quarter-rival-car').style.left='4%';
   quarterPlayer=buildQuarterSim(selectedCar,rt,true);
   const rivalKeys=['ek','dc5','eg','awd'].filter(k=>k!==selectedCar);
   const rivalKey=rivalKeys[Math.floor(Math.random()*rivalKeys.length)];
   const rivalRT=Math.max(.035,.08+Math.random()*.16);
   quarterRival=buildQuarterSim(rivalKey,rivalRT,false);
-  quarterRunning=true;quarterStart=performance.now();
+  quarterRunning=true;
+  quarterStart=performance.now();
+  lockSettings(true);
+  renderMatch();
+  setView('FULL PASS','+'+rt.toFixed(3),'Quarter-mile race in progress…');
   quarterRAF=requestAnimationFrame(quarterFrame);
 }
 
